@@ -3,6 +3,8 @@ using System.Threading.Tasks;
 using Azure.Data.AppConfiguration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.AzureAppConfiguration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.FeatureManagement;
 
 namespace AzureAppConfig
 {
@@ -24,12 +26,16 @@ namespace AzureAppConfig
                 {
                     refresh.Register("DemoApp:Name")
                     .SetCacheExpiration(TimeSpan.FromSeconds(10));
-                });
+                })
+                .UseFeatureFlags();
                 _refresher = options.GetRefresher();
             });
 
             //now build the configuration object
             var config = builder.Build();
+            IServiceCollection services = new ServiceCollection();
+
+            services.AddSingleton<IConfiguration>(config).AddFeatureManagement();
 
             //access keys
             var key = "DemoApp:Name";
@@ -50,9 +56,21 @@ namespace AzureAppConfig
 
             var configClient = new ConfigurationClient(appConfigConnectionString);
 
-            var dacConfigKey = $"DemoApp:TestKey";
+            var dacConfigKey = $"DemoApp:TestKey{Guid.NewGuid()}";
             var dacAppConfigSetting = new ConfigurationSetting(dacConfigKey, "TestValue");
             await configClient.AddConfigurationSettingAsync(dacAppConfigSetting, default);
+
+
+            using (ServiceProvider serviceProvider = services.BuildServiceProvider())
+            {
+                IFeatureManager featureManager = serviceProvider.GetRequiredService<IFeatureManager>();
+
+                if (await featureManager.IsEnabledAsync("Beta"))
+                {
+                    Console.WriteLine("Welcome to the beta!");
+                }
+            }
+            Console.WriteLine("Press any KEY to stop");
 
             Console.ReadLine();
 
